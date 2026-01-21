@@ -1,0 +1,101 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+// CAMBIO CLAVE: Usamos PostgreSQL y una variable de entorno
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// 1. CATÁLOGOS
+// ==========================================
+
+model Contratista {
+  id          Int              @id @default(autoincrement())
+  nombre      String           @unique
+  activo      Boolean          @default(true)
+  formularios FormularioDiario[]
+}
+
+model Proyecto {
+  id          Int              @id @default(autoincrement())
+  nombre      String           @unique
+  activo      Boolean          @default(true)
+  formularios FormularioDiario[]
+}
+
+model Sector {
+  id          Int              @id @default(autoincrement())
+  nombre      String           @unique
+  activo      Boolean          @default(true)
+  formularios FormularioDiario[]
+  operarios   Operario[]       
+}
+
+model Supervisor {
+  id          Int              @id @default(autoincrement())
+  nombre      String           @unique
+  activo      Boolean          @default(true)
+  formularios FormularioDiario[]
+}
+
+model Operario {
+  id        Int      @id @default(autoincrement())
+  nombre    String   @unique
+  legajo    String?
+  activo    Boolean  @default(true)
+  sectorId  Int?     
+  sector    Sector?  @relation(fields: [sectorId], references: [id])
+  detalles  DetalleActividad[]
+}
+
+model Actividad {
+  id        Int      @id @default(autoincrement())
+  nombre    String   @unique
+  activo    Boolean  @default(true)
+  detalles  DetalleActividad[]
+}
+
+model UnidadMedida {
+  id     Int    @id @default(autoincrement())
+  codigo String @unique
+  nombre String
+}
+
+// ==========================================
+// 2. FORMULARIOS
+// ==========================================
+
+model FormularioDiario {
+  id            Int      @id @default(autoincrement())
+  fecha         DateTime 
+  ordenCompra   String?
+  contratistaId Int
+  contratista   Contratista @relation(fields: [contratistaId], references: [id])
+  proyectoId    Int
+  proyecto      Proyecto    @relation(fields: [proyectoId], references: [id])
+  sectorId      Int
+  sector        Sector      @relation(fields: [sectorId], references: [id])
+  supervisorId  Int
+  supervisor    Supervisor  @relation(fields: [supervisorId], references: [id])
+  turno         String      
+  observaciones String?     
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  detalles      DetalleActividad[]
+
+  @@index([fecha])
+}
+
+model DetalleActividad {
+  id           Int              @id @default(autoincrement())
+  formularioId Int
+  formulario   FormularioDiario @relation(fields: [formularioId], references: [id], onDelete: Cascade)
+  operarioId   Int
+  operario     Operario         @relation(fields: [operarioId], references: [id])
+  actividadId  Int
+  actividad    Actividad        @relation(fields: [actividadId], references: [id])
+  horas        Decimal          
+}
