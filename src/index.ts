@@ -4,7 +4,7 @@ import { PrismaClient } from '@prisma/client';
 import ExcelJS from 'exceljs';
 import puppeteer from 'puppeteer';
 import path from 'path';
-import { fileURLToPath } from 'url'; // <-- Faltaba esta línea importante
+import { fileURLToPath } from 'url';
 
 // --- Parche para __dirname ---
 const __filename = fileURLToPath(import.meta.url);
@@ -12,12 +12,21 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const prisma = new PrismaClient();
-const port = process.env.PORT || 3000;
 
-// (Aquí borré la segunda vez que decia "const app = express()")
+// Aseguramos que el puerto sea un número (Vital para Railway)
+const PORT = parseInt(process.env.PORT || '3000', 10);
 
 app.use(cors());
 app.use(express.json());
+
+// ==========================================
+// 📡 EL CHISMOSO (MONITOR DE TRÁFICO)
+// ==========================================
+// Esto nos dirá en los logs EXACTAMENTE qué está llegando
+app.use((req, res, next) => {
+  console.log(`📡 LLEGÓ PETICIÓN: ${req.method} ${req.url}`);
+  next();
+});
 
 // --- UTILIDADES ---
 const formatDate = (date: Date) => {
@@ -36,16 +45,24 @@ function crearRutasCatalogo(nombreModelo: string, modeloPrisma: any) {
 
       const items = await modeloPrisma.findMany({ where, orderBy: { nombre: 'asc' } });
       res.json(items);
-    } catch (error) { res.status(500).json({ error: `Error al obtener ${nombreModelo}` }); }
+    } catch (error) { 
+        console.error(`Error GET ${nombreModelo}:`, error);
+        res.status(500).json({ error: `Error al obtener ${nombreModelo}` }); 
+    }
   });
 
   app.post(ruta, async (req, res) => {
     try {
+      console.log(`Intentando crear en ${nombreModelo}:`, req.body); // Log extra para ver los datos
       let data = req.body;
       if (data.sectorId) data.sectorId = Number(data.sectorId);
       const nuevo = await modeloPrisma.create({ data });
+      console.log("Creado con éxito:", nuevo);
       res.json(nuevo);
-    } catch (error) { res.status(400).json({ error: `Error al crear.` }); }
+    } catch (error) { 
+        console.error(`Error POST ${nombreModelo}:`, error);
+        res.status(400).json({ error: `Error al crear.` }); 
+    }
   });
 
   app.delete(`${ruta}/:id`, async (req, res) => {
@@ -68,6 +85,7 @@ crearRutasCatalogo('actividades', prisma.actividad);
 
 app.post('/api/formularios', async (req, res) => {
   try {
+    console.log("Recibiendo formulario:", req.body);
     const { detalles, ...cabecera } = req.body;
     const nuevo = await prisma.formularioDiario.create({
       data: {
@@ -88,8 +106,12 @@ app.post('/api/formularios', async (req, res) => {
         }
       }
     });
+    console.log("Formulario guardado ID:", nuevo.id);
     res.json(nuevo);
-  } catch (error) { res.status(400).json({ error: 'Error guardando formulario' }); }
+  } catch (error) { 
+    console.error("Error guardando formulario:", error);
+    res.status(400).json({ error: 'Error guardando formulario' }); 
+  }
 });
 
 app.get('/api/formularios/buscar', async (req, res) => {
@@ -157,7 +179,7 @@ app.put('/api/formularios/:id', async (req, res) => {
 
 
 // ==========================================
-//           RUTAS DE REPORTES
+//            RUTAS DE REPORTES
 // ==========================================
 
 app.get('/api/reportes/excel', async (req, res) => {
@@ -254,55 +276,4 @@ app.get('/api/reportes/pdf/:id', async (req, res) => {
         </div>
         <table class="meta-table">
           <tr><td class="label">FECHA:</td><td><strong>${formatDate(form.fecha)}</strong></td><td class="label">TURNO:</td><td>${form.turno}</td></tr>
-          <tr><td class="label">SECTOR:</td><td>${form.sector.nombre}</td><td class="label">SUPERVISOR:</td><td>${form.supervisor.nombre}</td></tr>
-          <tr><td class="label">PROYECTO:</td><td>${form.proyecto.nombre}</td><td class="label">CONTRATISTA:</td><td>${form.contratista.nombre}</td></tr>
-           <tr><td class="label">ORDEN DE COMPRA:</td><td colspan="3">${form.ordenCompra || '-'}</td></tr>
-        </table>
-        <table class="data-table">
-          <thead><tr><th>Operario / Recurso</th><th>Actividad Realizada</th><th style="text-align: right;">Horas</th></tr></thead>
-          <tbody>
-            ${form.detalles.map((d: any) => `<tr><td><strong>${d.operario.nombre}</strong></td><td>${d.actividad.nombre}</td><td style="text-align: right;">${d.horas} hs</td></tr>`).join('')}
-          </tbody>
-        </table>
-        <div class="summary-section">
-          <div class="obs-box"><strong>OBSERVACIONES:</strong><br><br>${form.observaciones || 'Sin observaciones registradas.'}</div>
-          <div class="total-box">TOTAL HORAS: ${totalHoras}</div>
-        </div>
-        <div class="footer">
-          <div class="signature-block"><div class="line"></div><div class="sign-name">${form.supervisor.nombre}</div><div class="sign-role">Firma Supervisor</div></div>
-          <div class="signature-block"><div class="line"></div><div class="sign-name">RESPONSABLE CLIENTE</div><div class="sign-role">Conformidad de Servicio</div></div>
-        </div>
-      </body>
-      </html>
-    `;
-    
-    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
-    const page = await browser.newPage();
-    await page.setContent(htmlContent);
-    const pdfBuffer = await page.pdf({ format: 'A4', printBackground: true, margin: { top: '1cm', right: '1cm', bottom: '1cm', left: '1cm' } });
-    await browser.close();
-    
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename=Parte_${id}.pdf`);
-    res.send(pdfBuffer);
-  } catch (error) { res.status(500).send("Error PDF"); }
-});
-
-// ==========================================
-//    SERVIR FRONTEND EN PRODUCCIÓN
-// ==========================================
-app.use(express.static(path.join(__dirname, '../frontend/dist')));
-
-app.get(/.*/, (req, res) => {
-  if (req.path.startsWith('/api')) return res.status(404).send('API endpoint no encontrado');
-  res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
-});
-
-// --- CAMBIO CLAVE PARA LA NUBE ---
-// Usamos process.env.PORT si existe (Nube), sino el 3000 (Local)
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n==================================================`);
-  console.log(`🚀 SISTEMA ONLINE EN PUERTO: ${PORT} y HOST: 0.0.0.0`);
-  console.log(`==================================================\n`);
-});
+          <tr><td class="label">SECTOR:</td><td>${form.sector.nombre}</td><td class="label">SUPERVISOR:</td>
