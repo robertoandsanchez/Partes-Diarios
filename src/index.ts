@@ -4,9 +4,17 @@ import { PrismaClient } from '@prisma/client';
 import ExcelJS from 'exceljs';
 import puppeteer from 'puppeteer';
 import path from 'path';
+import { fileURLToPath } from 'url'; // <-- Faltaba esta línea importante
 
-const prisma = new PrismaClient();
+// --- Parche para __dirname ---
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const app = express();
+const prisma = new PrismaClient();
+const port = process.env.PORT || 3000;
+
+// (Aquí borré la segunda vez que decia "const app = express()")
 
 app.use(cors());
 app.use(express.json());
