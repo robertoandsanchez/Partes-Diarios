@@ -1,10 +1,11 @@
 // frontend/src/api.ts
 import axios from 'axios';
 
-// Creamos una conexión directa a tu servidor en el puerto 3000
+// CAMBIO IMPORTANTE: Usamos '/api' (ruta relativa).
+// Esto le dice al sistema: "Busca la API en la misma dirección web donde estoy ahora".
+// Funciona en tu PC y funciona en Railway automáticamente.
 export const api = axios.create({
-  baseURL: 'http://localhost:3000/api',
+  baseURL: '/api',
 });
 
-// Esta función ayuda a que, si se cae internet, no explote todo
 export const fetcher = (url: string) => api.get(url).then((res) => res.data);
