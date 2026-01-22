@@ -301,8 +301,8 @@ app.get(/.*/, (req, res) => {
 // --- CAMBIO CLAVE PARA LA NUBE ---
 // Usamos process.env.PORT si existe (Nube), sino el 3000 (Local)
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`\n==================================================`);
-  console.log(`🚀 SISTEMA ONLINE EN PUERTO: ${PORT}`);
+  console.log(`🚀 SISTEMA ONLINE EN PUERTO: ${PORT} y HOST: 0.0.0.0`);
   console.log(`==================================================\n`);
 });
