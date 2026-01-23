@@ -1,8 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import { PrismaClient } from '@prisma/client';
-import puppeteer from 'puppeteer';
 import ExcelJS from 'exceljs';
+// import puppeteer from 'puppeteer'; <-- LO QUITAMOS PARA QUE NO DE ERROR
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -16,15 +16,15 @@ const PORT = parseInt(process.env.PORT || '3000', 10);
 app.use(cors());
 app.use(express.json());
 
-// --- MONITOR DE ERRORES (LOGS) ---
+// --- MONITOR DE LOGS ---
 app.use((req, res, next) => {
-  console.log(`📡 [${new Date().toLocaleTimeString()}] PETICIÓN: ${req.method} ${req.url}`);
+  console.log(`📡 [${new Date().toLocaleTimeString()}] ${req.method} ${req.url}`);
   next();
 });
 
 const formatDate = (date: Date) => {
   try { return date.toISOString().split('T')[0].split('-').reverse().join('/'); } 
-  catch (e) { return 'Fecha inválida'; }
+  catch (e) { return '-'; }
 };
 
 // --- RUTAS DE CATÁLOGOS ---
@@ -62,12 +62,11 @@ crearRutasCatalogo('supervisores', prisma.supervisor);
 crearRutasCatalogo('operarios', prisma.operario);
 crearRutasCatalogo('actividades', prisma.actividad);
 
-// --- FORMULARIOS (CREAR Y EDITAR) ---
+// --- GESTIÓN DE FORMULARIOS ---
 
-// CREAR
 app.post('/api/formularios', async (req, res) => {
   try {
-    console.log("📝 Intentando CREAR formulario:", req.body);
+    console.log("📝 CREAR Formulario:", req.body);
     const { detalles, ...cabecera } = req.body;
     const nuevo = await prisma.formularioDiario.create({
       data: {
@@ -88,25 +87,18 @@ app.post('/api/formularios', async (req, res) => {
         }
       }
     });
-    console.log("✅ Creado ID:", nuevo.id);
     res.json(nuevo);
   } catch (error) { 
-    console.error("❌ ERROR AL CREAR:", error); // ¡ESTO ES LO IMPORTANTE!
+    console.error("❌ Error Crear:", error); 
     res.status(400).json({ error: 'Error al guardar' }); 
   }
 });
 
-// EDITAR (AQUÍ ESTÁ EL PROBLEMA)
 app.put('/api/formularios/:id', async (req, res) => {
   try {
     const id = Number(req.params.id);
-    console.log(`🔄 Intentando EDITAR ID ${id}. Datos:`, req.body);
+    console.log(`🔄 EDITAR Formulario ${id}`);
     const { detalles, ...cabecera } = req.body;
-
-    // Validación básica de números
-    if (!cabecera.sectorId || !cabecera.supervisorId) {
-        throw new Error("Faltan IDs obligatorios (Sector o Supervisor)");
-    }
 
     const actualizado = await prisma.$transaction([
       prisma.detalleActividad.deleteMany({ where: { formularioId: id } }),
@@ -131,11 +123,10 @@ app.put('/api/formularios/:id', async (req, res) => {
         }
       })
     ]);
-    console.log("✅ Editado correctamente");
     res.json(actualizado);
   } catch (error: any) { 
-    console.error("❌ ERROR AL EDITAR:", error.message, error); // ¡VEREMOS ESTO EN LOGS!
-    res.status(400).json({ error: 'Error al actualizar: ' + error.message }); 
+    console.error("❌ Error Editar:", error);
+    res.status(400).json({ error: 'Error al actualizar' }); 
   }
 });
 
@@ -170,11 +161,10 @@ app.get('/api/formularios/:id', async (req, res) => {
   } catch (error) { res.status(404).send("No encontrado"); }
 });
 
-// --- REPORTES ---
+// --- REPORTES (PDF Y EXCEL) ---
 
 app.get('/api/reportes/excel', async (req, res) => {
   try {
-    console.log("📊 Generando Excel...");
     const { desde, hasta } = req.query; 
     if (!desde || !hasta) return res.status(400).send("Falta rango");
 
@@ -212,15 +202,12 @@ app.get('/api/reportes/excel', async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename=Reporte.xlsx`);
     await workbook.xlsx.write(res);
     res.end();
-  } catch (error) { 
-      console.error("❌ Error Excel:", error);
-      res.status(500).send("Error Excel"); 
-  }
+  } catch (error) { res.status(500).send("Error Excel"); }
 });
 
+// --- SOLUCIÓN PDF: VISTA DE IMPRESIÓN ---
 app.get('/api/reportes/pdf/:id', async (req, res) => {
   try {
-    console.log(`📄 Generando PDF para ID ${req.params.id}`);
     const id = Number(req.params.id);
     const form = await prisma.formularioDiario.findUnique({
       where: { id },
@@ -231,34 +218,93 @@ app.get('/api/reportes/pdf/:id', async (req, res) => {
     });
 
     if (!form) return res.status(404).send("No encontrado");
-    
+
+    // Calculamos total de horas
+    const totalHoras = form.detalles.reduce((sum: any, d: any) => sum + Number(d.horas), 0);
+
+    // Generamos una página HTML bonita que se imprime sola
     const htmlContent = `
-      <html><head><style>body{font-family:Arial;padding:20px;} li{margin-bottom:5px;}</style></head><body>
-        <h1 style="color:#1e3a8a;">Parte Diario #${form.id}</h1>
-        <p><strong>Fecha:</strong> ${formatDate(form.fecha)} | <strong>Turno:</strong> ${form.turno}</p>
-        <p><strong>Sector:</strong> ${form.sector.nombre}</p>
-        <p><strong>Supervisor:</strong> ${form.supervisor.nombre}</p>
-        <hr/>
-        <h3>Detalle de Actividades</h3>
-        <ul>
-          ${form.detalles.map((d: any) => `<li><strong>${d.operario.nombre}</strong>: ${d.actividad.nombre} (${d.horas} hs)</li>`).join('')}
-        </ul>
-        <hr/><p>Generado automáticamente.</p>
-      </body></html>
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Parte Diario #${form.id}</title>
+        <meta charset="UTF-8">
+        <style>
+          body { font-family: 'Helvetica', Arial, sans-serif; padding: 40px; color: #333; max-width: 800px; margin: 0 auto; }
+          .header { text-align: center; border-bottom: 3px solid #1e3a8a; padding-bottom: 20px; margin-bottom: 30px; }
+          .title { font-size: 24px; color: #1e3a8a; margin: 0; text-transform: uppercase; }
+          .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 14px; }
+          .meta-table td { padding: 8px; border-bottom: 1px solid #eee; }
+          .label { font-weight: bold; color: #555; width: 140px; background: #f8fafc; }
+          .data-table { width: 100%; border-collapse: collapse; margin-top: 10px; border: 1px solid #ddd; }
+          .data-table th { background: #1e3a8a; color: white; padding: 10px; text-align: left; font-size: 12px; }
+          .data-table td { border-bottom: 1px solid #ddd; padding: 10px; font-size: 13px; }
+          .footer { margin-top: 60px; display: flex; justify-content: space-between; }
+          .sign { width: 40%; text-align: center; border-top: 1px solid #333; padding-top: 5px; font-size: 12px; }
+          
+          /* Ocultar botones al imprimir */
+          @media print { .no-print { display: none; } }
+          .btn-print { background: #1e3a8a; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin-bottom: 20px; cursor: pointer;}
+        </style>
+      </head>
+      <body>
+        <div class="no-print" style="text-align: right;">
+            <button onclick="window.print()" class="btn-print">🖨️ IMPRIMIR / GUARDAR COMO PDF</button>
+        </div>
+
+        <div class="header">
+          <h1 class="title">Parte Diario de Servicio</h1>
+          <div>ID REGISTRO #${form.id}</div>
+        </div>
+
+        <table class="meta-table">
+          <tr><td class="label">FECHA:</td><td><strong>${formatDate(form.fecha)}</strong></td><td class="label">TURNO:</td><td>${form.turno}</td></tr>
+          <tr><td class="label">SECTOR:</td><td>${form.sector.nombre}</td><td class="label">SUPERVISOR:</td><td>${form.supervisor.nombre}</td></tr>
+          <tr><td class="label">PROYECTO:</td><td>${form.proyecto.nombre}</td><td class="label">CONTRATISTA:</td><td>${form.contratista.nombre}</td></tr>
+          <tr><td class="label">ORDEN COMPRA:</td><td colspan="3">${form.ordenCompra || '-'}</td></tr>
+        </table>
+
+        <h3 style="color: #1e3a8a; margin-top: 30px;">Detalle de Actividades</h3>
+        <table class="data-table">
+          <thead><tr><th>Operario</th><th>Actividad</th><th style="text-align:right">Horas</th></tr></thead>
+          <tbody>
+            ${form.detalles.map((d: any) => `
+              <tr>
+                <td><strong>${d.operario.nombre}</strong></td>
+                <td>${d.actividad.nombre}</td>
+                <td style="text-align:right">${d.horas} hs</td>
+              </tr>`).join('')}
+            <tr style="background: #f1f5f9; font-weight: bold;">
+              <td colspan="2" style="text-align: right;">TOTAL HORAS:</td>
+              <td style="text-align: right;">${totalHoras} hs</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div style="margin-top: 20px; border: 1px solid #ddd; padding: 15px; border-radius: 5px; background: #f9f9f9;">
+            <strong>OBSERVACIONES:</strong><br>
+            ${form.observaciones || 'Sin observaciones.'}
+        </div>
+
+        <div class="footer">
+            <div class="sign">Firma Supervisor<br><strong>${form.supervisor.nombre}</strong></div>
+            <div class="sign">Conformidad Cliente</div>
+        </div>
+
+        <script>
+            // Intentar imprimir automáticamente al abrir
+            setTimeout(() => window.print(), 500);
+        </script>
+      </body>
+      </html>
     `;
     
-    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
-    const page = await browser.newPage();
-    await page.setContent(htmlContent);
-    const pdfBuffer = await page.pdf({ format: 'A4' });
-    await browser.close();
-    
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename=Parte_${id}.pdf`);
-    res.send(pdfBuffer);
+    // Enviamos HTML en lugar de binario PDF
+    res.send(htmlContent);
+
   } catch (error) { 
-    console.error("❌ Error PDF:", error);
-    res.status(500).send("Error PDF"); 
+    console.error("❌ Error Vista:", error);
+    res.status(500).send("Error generando vista"); 
   }
 });
 
