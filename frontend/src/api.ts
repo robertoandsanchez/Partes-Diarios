@@ -1,8 +1,10 @@
 import axios from 'axios';
 
-// Conexión directa a tu servidor en el puerto 3000
+// --- CORRECCIÓN FINAL ---
+// Usamos solo '/api' para que funcione en la Nube y en el Celular.
+// El sistema completará la dirección automáticamente.
 export const api = axios.create({
-  baseURL: 'http://localhost:3000/api',
+  baseURL: '/api',
 });
 
 // Función auxiliar para descargar datos
