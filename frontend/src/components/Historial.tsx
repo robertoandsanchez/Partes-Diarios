@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 import { Search, Edit, FileDown } from 'lucide-react';
 
-// Función para formatear fecha sin que la zona horaria reste un día
+// Función para formatear fecha visualmente
 const formatearFechaVisual = (isoString: string) => {
   if (!isoString) return '-';
   // Tomamos la parte "YYYY-MM-DD" antes de la T, y la damos vuelta a "DD/MM/YYYY"
@@ -22,7 +22,10 @@ export function Historial({ alEditar }: { alEditar: (id: number) => void }) {
     }
   });
 
-  const descargarPDF = (id: number) => window.open(`http://localhost:3000/api/reportes/pdf/${id}`, '_blank');
+  // --- CORRECCIÓN CLAVE ---
+  // Quitamos "http://localhost:3000" y dejamos solo la barra "/"
+  // Esto hace que funcione tanto en tu PC como en el Celular/Nube
+  const descargarPDF = (id: number) => window.open(`/api/reportes/pdf/${id}`, '_blank');
 
   return (
     <div className="space-y-6">
@@ -60,7 +63,6 @@ export function Historial({ alEditar }: { alEditar: (id: number) => void }) {
               <tr key={f.id} className="hover:bg-gray-800/50 transition-colors">
                 <td className="px-6 py-4 font-mono text-blue-400 font-bold">#{f.id}</td>
                 
-                {/* AQUÍ ESTÁ EL CAMBIO: Usamos la función manual */}
                 <td className="px-6 py-4 text-gray-300">{formatearFechaVisual(f.fecha)}</td>
                 
                 <td className="px-6 py-4 text-white">{f.supervisor.nombre}</td>

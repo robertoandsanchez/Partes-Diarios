@@ -8,7 +8,7 @@ export function FormularioDiario({ idEdicion, alTerminar }: { idEdicion: number 
   const [ultimoId, setUltimoId] = useState<number | null>(null);
   const queryClient = useQueryClient();
 
-  // CORRECCIÓN AQUÍ: Quitamos 'setValue' porque no lo estamos usando
+  // Quitamos setValue ya que no se usa directamente
   const { register, control, handleSubmit, reset, watch } = useForm({
     defaultValues: {
       fecha: new Date().toISOString().split('T')[0],
@@ -86,7 +86,10 @@ export function FormularioDiario({ idEdicion, alTerminar }: { idEdicion: number 
   });
 
   const onSubmit = (data: any) => { setUltimoId(null); mutation.mutate(data); };
-  const descargarPDF = () => ultimoId && window.open(`http://localhost:3000/api/reportes/pdf/${ultimoId}`, '_blank');
+
+  // --- CORRECCIÓN AQUÍ ---
+  // Usamos ruta relativa '/api/...' para que funcione en producción y celular
+  const descargarPDF = () => ultimoId && window.open(`/api/reportes/pdf/${ultimoId}`, '_blank');
 
   if (qSectores.isLoading) return <div className="text-gray-400 p-10">Cargando...</div>;
 
