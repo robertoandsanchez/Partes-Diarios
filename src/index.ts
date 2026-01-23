@@ -176,6 +176,8 @@ app.get('/api/reportes/excel', async (req, res) => {
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Reporte');
+    
+    // --- AQUÍ AGREGUÉ LA COLUMNA SUPERVISOR ---
     sheet.columns = [
       { header: 'ID', key: 'id', width: 8 },
       { header: 'FECHA', key: 'fecha', width: 12 },
@@ -183,6 +185,7 @@ app.get('/api/reportes/excel', async (req, res) => {
       { header: 'TURNO', key: 'turno', width: 10 },
       { header: 'OPERARIOS', key: 'operarios', width: 10 },
       { header: 'HORAS', key: 'horas', width: 10 },
+      { header: 'SUPERVISOR', key: 'supervisor', width: 20 }, // <--- NUEVA COLUMNA
     ];
     sheet.getRow(1).font = { bold: true };
 
@@ -195,6 +198,7 @@ app.get('/api/reportes/excel', async (req, res) => {
         turno: f.turno,
         operarios: f.detalles.length,
         horas: totalHoras,
+        supervisor: f.supervisor.nombre.toUpperCase() // <--- DATO DEL SUPERVISOR
       });
     });
 
